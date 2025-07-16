@@ -94,6 +94,61 @@ async def run_api(query: str, method: str) -> str:
     return response
 
 
+# Function to search for the endpoint in the database
+def search_endpoint(query: str):
+    """
+    Searches for a matching API endpoint in the local SQLite database.
+
+    Args:
+        query (str): The query string to search for in the API schema's paths.
+
+    Returns:
+        list[Dict[str, Any]]: A list of endpoint data (paths, methods, descriptions, etc.) that match the query.
+        
+    Description:
+        This function queries the local Leostream API database (sqlite) for API endpoints that match a given query string.
+        It returns a structured list containing the path, HTTP method, description, request body, and response details
+        for each endpoint that matches the query. Useful for dynamically finding relevant API documentation.
+    """
+    sqliteDB = "api_schema4_leostream.db"
+    conn = sqlite3.connect(sqliteDB)
+    cursor = conn.cursor()
+    cursor.execute("SELECT path, method, description, request_body, responses FROM api_endpoints WHERE path LIKE ?", (f"%{query}%",))
+    results = cursor.fetchall()
+    conn.close()
+
+    return [{"path": path, "method": method, "description": description,
+             "request_body": json.loads(request_body) if request_body != "None" else None,
+             "responses": json.loads(responses)} for path, method, description, request_body, responses in results]
+
+@mcp.tool()
+async def query_api(query: str) -> str:
+    """
+    Queries the local Leostream REST API schema for matching endpoints and returns them in JSON format.
+
+    Args:
+        query (str): The path or query to search for in the local API schema.
+
+    Returns:
+        str: A JSON string containing all matching API paths or an error message if no matches are found.
+    
+    Description:
+        This function performs a local database search to find API endpoints based on the given query string.
+        It formats the results into a structured JSON response, making it easy for external clients to access
+        the available API paths, methods, and descriptions.
+    """
+    # Search for the endpoint in the local schema database
+    results = search_endpoint(query)
+
+    if not results:
+        return json.dumps({"error": "No matching endpoints found"})
+
+    # Return all paths as available options
+    available_paths = [{"path": endpoint_info["path"], "description": endpoint_info["description"], "method": endpoint_info["method"], "request_body": endpoint_info["request_body"], "response": endpoint_info["responses"]} for endpoint_info in results]
+    return json.dumps({"available_paths": available_paths})
+
+
+
 @mcp.tool()
 async def generate_session() -> str:
     """
