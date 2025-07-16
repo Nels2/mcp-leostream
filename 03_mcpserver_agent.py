@@ -35,28 +35,28 @@ async def make_request(url: str, method: str, headers: dict = None, data: dict =
         methods (GET, POST, PUT, DELETE) and includes error handling for both network issues and HTTP errors.
         It raises exceptions for non-2xx HTTP responses and provides detailed error messages for debugging.
     """
-    sessionID2use = pickle.load( open( "/Projects/api_leostream/session/LeostreamLogin.p", "rb"))
-    sessionID2try = f"Bearer {sessionID2use}"
-
     headers = headers or {}
     headers["User-Agent"] = USER_AGENT
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = sessionID2try
-    #print(f"USING THESE HEADERS: {headers}")
     async with httpx.AsyncClient(verify=False) as client:
         try:
-            if method.lower() == "get":
-                response = await client.get(url, headers=headers, params=params, timeout=30.0)
-            elif method.lower() == "post":
-                response = await client.post(url, headers=headers, json=data, timeout=30.0)
-            elif method.lower() == "put":
-                response = await client.put(url, headers=headers, json=data, timeout=30.0)
-            elif method.lower() == "delete":
-                response = await client.delete(url, headers=headers, timeout=30.0)
+            method_lower = method.lower()
+            request_args = {"headers": headers, "timeout": 30.0}
+
+            if method_lower in ["get", "delete", "head", "options"]:
+                # For methods that do not send JSON body, use params for query parameters
+                request_args["params"] = data or params
             else:
-                return {"error": f"Unsupported HTTP method: {method}"}
+                # For methods that can send a JSON body
+                request_args["json"] = data
+                if params:
+                    request_args["params"] = params
+
+            response = await getattr(client, method_lower)(url, **request_args)
             response.raise_for_status()
             return response.json()
+
+        except httpx.HTTPStatusError as e:
+            return {"error": str(e), "details": e.response.text}
         except Exception as e:
             return {"error": str(e)}
 
